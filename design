@@ -1,0 +1,72 @@
+User
+    - email (unique)
+    - username
+    - password
+    - role (choices: Admin, Supplier, Customer, Delivery)
+
+
+
+PRODUCT
+    - supplier (FK to Supplier)
+    - product_name
+    - product_description
+    - product_price
+    - product_image
+    - stock_quantity
+    - category
+        + household appliances
+        + electronics
+        + clothing
+        + accessories
+        + study materials
+        + sports equipment
+
+SUPPLIER
+    - user (FK to User)
+    - name
+    - phone
+    - address
+Customer
+    - user (FK to User)
+    - name
+    - phone
+    - address
+
+
+SELL
+    -PRODUCT (fk)
+    -CUSTOMER (fk)
+
+DeliveryPersonnel
+- id (PK)
+- user (FK to User)
+- name
+- phone
+- address
+
+Order
+    - customer (FK to Customer)
+    - order_date
+    - status (choices: Pending, Processing, Shipped, Delivered, Cancelled)
+    - total_amount
+    - payment_status (choices: Pending, Paid, Failed)
+
+OrderItem
+    - id (PK)
+    - order (FK to Order)
+    - product (FK to Product)
+    - quantity
+    - price
+
+Delivery
+    - order (FK to Order)
+    - delivery_personnel (FK to DeliveryPersonnel)
+    - delivery_status (choices: Assigned, In Transit, Delivered)
+    - assigned_date
+    - delivered_date
+
+Notification
+    - user (FK to User)
+    - message
+    - is_read
+    - created_at
