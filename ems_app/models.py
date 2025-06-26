@@ -20,7 +20,7 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.full_name} ({self.user_role})"
 
-# -------------------- Customer Profile --------------------
+
 class Customer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
@@ -29,7 +29,7 @@ class Customer(models.Model):
     def __str__(self):
         return self.user.full_name
 
-# -------------------- Supplier Profile --------------------
+
 class Supplier(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
@@ -38,7 +38,7 @@ class Supplier(models.Model):
     def __str__(self):
         return self.user.full_name
 
-# -------------------- Delivery Personnel --------------------
+
 class DeliveryPersonnel(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
@@ -47,7 +47,7 @@ class DeliveryPersonnel(models.Model):
     def __str__(self):
         return self.user.full_name
 
-# -------------------- Product --------------------
+
 class Product(models.Model):
     CATEGORY_CHOICES = [
         ('household', 'Household Appliances'),
@@ -62,22 +62,22 @@ class Product(models.Model):
     product_name = models.CharField(max_length=255)
     product_description = models.TextField()
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
-    product_image = models.ImageField(upload_to='products/')
+    product_image = models.ImageField(upload_to='static/products/')
     stock_quantity = models.PositiveIntegerField()
     category = models.CharField(choices=CATEGORY_CHOICES, max_length=50)
 
     def __str__(self):
         return self.product_name
 
-# -------------------- Sell (Purchase/Cart History) --------------------
-class Sell(models.Model):
+
+class SoldData(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.customer.user.full_name} bought {self.product.product_name}"
 
-# -------------------- Order --------------------
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -102,7 +102,6 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} by {self.customer.user.full_name}"
 
-# -------------------- Order Item --------------------
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -112,7 +111,7 @@ class OrderItem(models.Model):
     def __str__(self):
         return f"{self.product.product_name} x{self.quantity}"
 
-# -------------------- Delivery --------------------
+
 class Delivery(models.Model):
     DELIVERY_STATUS_CHOICES = [
         ('assigned', 'Assigned'),
@@ -129,7 +128,7 @@ class Delivery(models.Model):
     def __str__(self):
         return f"Delivery for Order #{self.order.id}"
 
-# -------------------- Notification --------------------
+
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
