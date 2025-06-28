@@ -6,6 +6,7 @@ from .serializers import *
 from rest_framework.viewsets import ModelViewSet
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
+from rest_framework.exceptions import PermissionDenied
 
 
 
@@ -75,8 +76,38 @@ def login(request):
         return Response(token.key)       
 
 class ProductViewSet(ModelViewSet):
-    queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    filterset_fields = ['category']
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        if user.user_role == 'supplier':
+            return Product.objects.filter(supplier=user.supplier)
+        
+        return Product.objects.all()# if customer or admin ho vane herna pauna paro sab
+    
+    def perform_create(self, serializer):
+        user = self.request.user
+        
+        if user.user_role != 'supplier':
+            raise PermissionDenied('Only suppliers can create products')
+        
+        supplier = user.supplier
+        serializer.save(supplier=supplier)
+        
+    def get_object(self):
+        obj = super().get_object()
+        user = self.request.user
+        
+        if user.user_role == 'supplier' and obj.supplier.user != user:
+            raise PermissionDenied('You can only view your own products')
+        
+        elif user.user_role != 'supplier':
+            raise PermissionDenied('Only suppliers can view their own products')
+        return obj
+    
+
     
     
     
