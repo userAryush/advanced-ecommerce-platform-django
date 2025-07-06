@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-
+from base.models import BaseModel
+import uuid    
 # Create your models here.
 
 class User(AbstractUser):
@@ -21,7 +22,7 @@ class User(AbstractUser):
         return f"{self.full_name} ({self.user_role})"
 
 
-class Customer(models.Model):
+class Customer(BaseModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
     address = models.TextField()
@@ -30,7 +31,7 @@ class Customer(models.Model):
         return self.user.full_name
 
 
-class Supplier(models.Model):
+class Supplier(BaseModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
     address = models.TextField()
@@ -39,7 +40,7 @@ class Supplier(models.Model):
         return self.user.full_name
 
 
-class DeliveryPersonnel(models.Model):
+class DeliveryPersonnel(BaseModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
     address = models.TextField()
@@ -47,40 +48,28 @@ class DeliveryPersonnel(models.Model):
     def __str__(self):
         return self.user.full_name
 
-
-class Product(models.Model):
-    CATEGORY_CHOICES = [
-        ('household', 'Household Appliances'),
-        ('electronics', 'Electronics'),
-        ('clothing', 'Clothing'),
-        ('accessories', 'Accessories'),
-        ('study', 'Study Materials'),
-        ('sports', 'Sports Equipment'),
-    ]
-
+class ProductCategory(BaseModel):
+    category_name = models.CharField(max_length=255)
+    category_description = models.TextField()
+    def __str__(self):
+        return self.name
+    
+class Product(BaseModel):
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
     product_name = models.CharField(max_length=255)
     product_description = models.TextField()
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
-    product_image = models.ImageField(upload_to='static/products/')
+    product_image = models.ImageField(upload_to='products/')
     stock_quantity = models.PositiveIntegerField()
-    category = models.CharField(choices=CATEGORY_CHOICES, max_length=50)
+    category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.product_name
 
-
-class SoldData(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
-
-    def __str__(self):
-        return f"{self.customer.user.full_name} bought {self.product.product_name}"
-
-
-class Order(models.Model):
+class Order(BaseModel):
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
+        ('cart', 'cart'),
+        ('ordered', 'ordered'),
         ('shipped', 'Shipped'),
         ('delivered', 'Delivered'),
         ('cancelled', 'Cancelled'),
@@ -101,7 +90,7 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} by {self.customer.user.full_name}"
 
-class OrderItem(models.Model):
+class OrderItem(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
@@ -111,8 +100,9 @@ class OrderItem(models.Model):
         return f"{self.product.product_name} x{self.quantity}"
 
 
-class Delivery(models.Model):
+class Delivery(BaseModel):
     DELIVERY_STATUS_CHOICES = [
+        ('pending', 'Pending'),
         ('assigned', 'Assigned'),
         ('in_transit', 'In Transit'),
         ('delivered', 'Delivered'),
@@ -128,7 +118,7 @@ class Delivery(models.Model):
         return f"Delivery for Order #{self.order.id}"
 
 
-class Notification(models.Model):
+class Notification(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
     is_read = models.BooleanField(default=False)
@@ -136,3 +126,21 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.user.email}"
+
+
+class Payment(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.OneToOneField(Order, on_delete=models.CASCADE)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    payment_date = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ], default='pending')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_gateway = models.CharField(max_length=50, blank=True, null=True)
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return f"Payment for Order #{self.order.id} - {self.status}"
