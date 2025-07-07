@@ -234,8 +234,7 @@ class PaymentViewSet(ModelViewSet):
             return Payment.objects.filter(customer=user.customer)
         return Payment.objects.all()
 
-from rest_framework.response import Response
-from rest_framework import status
+
 
 class PaymentViewSet(ModelViewSet):
     serializer_class = PaymentSerializer
