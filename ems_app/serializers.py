@@ -1,4 +1,4 @@
-from .models import Product, User, Supplier, Customer,DeliveryPersonnel,Order,OrderItem,ProductCategory, Payment
+from .models import Product, User, Supplier, Customer,DeliveryPersonnel,Order,OrderItem,ProductCategory, Payment, Delivery
 from rest_framework.serializers import ModelSerializer
 
 class ProductSerializer(ModelSerializer):
@@ -41,6 +41,7 @@ class OrderItemSerializer(ModelSerializer):
     class Meta:
         model = OrderItem
         fields = '__all__'
+        read_only_fields = ['price']
         
 class ProductCategorySerializer(ModelSerializer):
     class Meta:
@@ -53,3 +54,7 @@ class PaymentSerializer(ModelSerializer):
         fields = '__all__'
         
         read_only_fields = ['customer', 'amount', 'status']
+class DeliverySerializer(ModelSerializer):
+    class Meta:
+        model = Delivery
+        fields = '__all__'

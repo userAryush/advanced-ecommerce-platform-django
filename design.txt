@@ -70,3 +70,13 @@ Notification
     - message
     - is_read
     - created_at
+
+
+
+category - 3
+product - 6
+order - 5
+customer -2 
+seller - 3
+deliverypersonnel - 2
+admin -1

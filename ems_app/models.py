@@ -113,6 +113,7 @@ class Delivery(BaseModel):
     delivery_status = models.CharField(choices=DELIVERY_STATUS_CHOICES, max_length=20)
     assigned_date = models.DateTimeField(auto_now_add=True)
     delivered_date = models.DateTimeField(null=True, blank=True)
+    delivery_address = models.TextField(default="Kathmandu")
 
     def __str__(self):
         return f"Delivery for Order #{self.order.id}"

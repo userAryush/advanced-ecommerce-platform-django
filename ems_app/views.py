@@ -1,15 +1,13 @@
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from django.contrib.auth.hashers import make_password
-from .models import Product,Order, OrderItem, Payment
+from .models import Product,Order, OrderItem, Payment, Delivery
 from .serializers import *
 from rest_framework.viewsets import ModelViewSet
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework import status
-
-
 
 
 @api_view(['POST'])
@@ -135,51 +133,43 @@ class OrderViewSet(ModelViewSet):
         user = self.request.user
         if user.user_role != 'customer':
             raise PermissionDenied('Only customers can create orders (carts).')
-        
         serializer.save(
             customer=user.customer,
             status='cart',
             payment_status='pending',
             total_amount=0
         )
-        
+    
     @action(detail=True, methods=['post'])
     def checkout(self, request, pk=None):
         order = self.get_object()
-        
         user = request.user
 
         if user.user_role != 'customer' or order.customer != user.customer:
             raise PermissionDenied('You can only checkout your own order.')
-
+        if order.status != 'cart':
+            return Response({'error': 'Only cart orders can be checked out.'}, status=400)
         if order.total_amount <= 0:
             raise ValidationError('Cannot checkout an empty cart.')
 
-        if order.payment_status != 'paid':
-            raise ValidationError('Please complete payment before checkout.')
-        
-        
-
-        order.status = 'ordered'  # Or 'ordered', or whatever your workflow needs
-                # ✅ Check and update stock for each item
-        for item in order.items.all():  # Make sure your Order model uses related_name='items'
-            product = item.product
-
-            if product.stock_quantity < item.quantity:
+        # Check stock but do NOT reduce stock yet
+        for item in order.items.all():
+            if item.product.stock_quantity < item.quantity:
                 raise ValidationError(
-                    f"Not enough stock for product '{product.name}'. "
-                    f"Available: {product.stock_quantity}, requested: {item.quantity}"
+                    f"Not enough stock for product '{item.product.name}'. "
+                    f"Available: {item.product.stock_quantity}, requested: {item.quantity}"
                 )
 
-        # ✅ All good, reduce stock now
-        for item in order.items.all():
-            product = item.product
-            product.stock_quantity -= item.quantity
-            product.save()
-        
+        order.status = 'checkout_pending'  # Waiting for payment
         order.save()
 
-        return Response({'status': 'Order placed successfully!'}, status=status.HTTP_200_OK)
+        # Return order summary (bill)
+        serializer = self.get_serializer(order)
+        return Response({
+            'message': 'Order ready for payment.',
+            'order': serializer.data
+        }, status=200)
+
     
 class OrderItemViewSet(ModelViewSet):
 
@@ -194,17 +184,33 @@ class OrderItemViewSet(ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         order = serializer.validated_data['order']
+        product = serializer.validated_data['product']
+        quantity = serializer.validated_data['quantity']
 
-        # ✅ Ensure customer owns the order
         if user.user_role != 'customer' or order.customer != user.customer:
             raise PermissionDenied('You can only add items to your own cart.')
 
-        instance = serializer.save()
+        # ✅ Check stock before adding
+        if product.stock_quantity < quantity:
+            raise ValidationError(
+                f"Not enough stock for '{product.name}'. "
+                f"Available: {product.stock_quantity}, requested: {quantity}."
+            )
+
+        serializer.save(price=product.product_price)
         self.update_order_total(order)
 
     def perform_update(self, serializer):
-        instance = serializer.save()
+        product = serializer.validated_data.get('product', None)
+        instance = serializer.instance
+
+        if product:
+            serializer.save(price=product.price)
+        else:
+            serializer.save()
+
         self.update_order_total(instance.order)
+
 
     def perform_destroy(self, instance):
         order = instance.order
@@ -228,22 +234,69 @@ class PaymentViewSet(ModelViewSet):
             return Payment.objects.filter(customer=user.customer)
         return Payment.objects.all()
 
-    def perform_create(self, serializer):
+from rest_framework.response import Response
+from rest_framework import status
+
+class PaymentViewSet(ModelViewSet):
+    serializer_class = PaymentSerializer
+
+    def get_queryset(self):
         user = self.request.user
+        if user.user_role == 'customer':
+            return Payment.objects.filter(customer=user.customer)
+        return Payment.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
         order = serializer.validated_data['order']
+        user = request.user
 
-        # ✅ Ensure customer owns the order
         if order.customer != user.customer:
-            raise PermissionDenied('You can only pay for your own orders.')
+            return Response({'detail': 'You can only pay for your own orders.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if order.status != 'checkout_pending':
+            return Response({'detail': 'Payment can only be done for orders in checkout pending status.'}, status=status.HTTP_400_BAD_REQUEST)
+
         if order.total_amount <= 0:
-            raise ValidationError('Cannot create payment for order with zero total.')
+            return Response({'detail': 'Cannot create payment for order with zero total.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        payment = serializer.save(customer=user.customer, amount=order.total_amount, status='completed')
+        payment = serializer.save(
+            customer=user.customer,
+            amount=order.total_amount,
+            status='completed'  # Assume success for simplicity
+        )
 
-        # Automatically update Order status if payment is already marked completed
         if payment.status == 'completed':
             order.payment_status = 'paid'
+            order.status = 'placed'
+
+            for item in order.items.all():
+                product = item.product
+                if product.stock_quantity < item.quantity:
+                    return Response(
+                        {'detail': f"Not enough stock for product '{product.name}' at payment time."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                product.stock_quantity -= item.quantity
+                product.save()
+
             order.save()
+
+            Delivery.objects.create(
+                order=order,
+                delivery_personnel=None,
+                delivery_status='pending',
+                delivered_date=None,
+                delivery_address=order.customer.address
+            )
+        
+        return Response(
+            {'detail': 'Payment successful and order placed.', 'payment': serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
 
     def perform_update(self, serializer):
         payment = serializer.save()
