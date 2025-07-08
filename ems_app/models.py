@@ -52,7 +52,7 @@ class ProductCategory(BaseModel):
     category_name = models.CharField(max_length=255)
     category_description = models.TextField()
     def __str__(self):
-        return self.name
+        return self.category_name
     
 class Product(BaseModel):
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
@@ -64,7 +64,7 @@ class Product(BaseModel):
     category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE)
 
     def __str__(self):
-        return self.product_name
+        return f"{self.id}. {self.product_name}"
 
 class Order(BaseModel):
     STATUS_CHOICES = [

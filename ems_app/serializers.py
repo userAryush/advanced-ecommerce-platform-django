@@ -58,3 +58,7 @@ class DeliverySerializer(ModelSerializer):
     class Meta:
         model = Delivery
         fields = '__all__'
+class NotificationSerializer(ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
