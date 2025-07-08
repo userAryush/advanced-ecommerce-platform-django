@@ -10,7 +10,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework import status
 
 
-@api_view(['POST'])
+@api_view(['POST','GET'])
 def register(request):
     data = request.data.copy()
     raw_password = data.get('password')
@@ -193,7 +193,7 @@ class OrderItemViewSet(ModelViewSet):
         # ✅ Check stock before adding
         if product.stock_quantity < quantity:
             raise ValidationError(
-                f"Not enough stock for '{product.name}'. "
+                f"Not enough stock for '{product.product_name}'. "
                 f"Available: {product.stock_quantity}, requested: {quantity}."
             )
 
@@ -235,7 +235,7 @@ class PaymentViewSet(ModelViewSet):
         return Payment.objects.all()
 
 
-
+from .utils import send_notification_email
 class PaymentViewSet(ModelViewSet):
     serializer_class = PaymentSerializer
 
@@ -275,13 +275,24 @@ class PaymentViewSet(ModelViewSet):
                 product = item.product
                 if product.stock_quantity < item.quantity:
                     return Response(
-                        {'detail': f"Not enough stock for product '{product.name}' at payment time."},
+                        {'detail': f"Not enough stock for product '{product.product_name}' at payment time."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 product.stock_quantity -= item.quantity
                 product.save()
 
             order.save()
+            if product.stock_quantity < 3:
+                supplier_email = product.supplier.user.email
+                subject = f"Low Stock Alert: {product.product_name}"
+                body = (
+                    f"Dear {product.supplier.user.full_name},\n\n"
+                    f"The stock for '{product.product_name}' is low.\n"
+                    f"Remaining quantity: {product.stock_quantity}.\n"
+                    f"Please restock soon.\n\n"
+                    f"- Aryush Ecom"
+                )
+                send_notification_email(subject, body, [supplier_email])
 
             Delivery.objects.create(
                 order=order,
@@ -290,6 +301,16 @@ class PaymentViewSet(ModelViewSet):
                 delivered_date=None,
                 delivery_address=order.customer.address
             )
+            subject = f"Order #{order.id} Confirmation"
+            body = (
+                f"Dear {user.full_name},\n\n"
+                f"Your order #{order.id} has been placed successfully.\n"
+                f"We will notify you when it is shipped.\n\n"
+                f"Order Total: ${order.total_amount}\n\n"
+                f"Thank you for shopping with us!"
+            )
+
+            send_notification_email(subject, body, [user.email])
         
         return Response(
             {'detail': 'Payment successful and order placed.', 'payment': serializer.data},
