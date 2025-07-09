@@ -109,7 +109,7 @@ def low_stock_emailing(product):
 @csrf_exempt
 def check_all_products_for_low_stock(request):
     if request.method == "POST":
-        low_stock_products = Product.objects.filter(stock_quantity__lt=3)
+        low_stock_products = Product.objects.filter(stock_quantity__lt=5)
         for product in low_stock_products:
             low_stock_emailing(product)
 

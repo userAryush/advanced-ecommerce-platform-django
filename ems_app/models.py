@@ -19,7 +19,7 @@ class User(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'full_name', 'user_role']
     def __str__(self):
-        return f"{self.full_name} ({self.user_role})"
+        return f"{self.id}. {self.full_name} ({self.user_role})"
 
 
 class Customer(BaseModel):
@@ -28,7 +28,7 @@ class Customer(BaseModel):
     address = models.TextField()
 
     def __str__(self):
-        return self.user.full_name
+        return f"{self.id}. {self.user.full_name}"
 
 
 class Supplier(BaseModel):
@@ -37,7 +37,7 @@ class Supplier(BaseModel):
     address = models.TextField()
 
     def __str__(self):
-        return self.user.full_name
+        return f"{self.id}. {self.user.full_name}"
 
 
 class DeliveryPersonnel(BaseModel):
@@ -46,7 +46,7 @@ class DeliveryPersonnel(BaseModel):
     address = models.TextField()
 
     def __str__(self):
-        return self.user.full_name
+        return f"{self.id}. {self.user.full_name}"
 
 class ProductCategory(BaseModel):
     category_name = models.CharField(max_length=255)
@@ -55,16 +55,16 @@ class ProductCategory(BaseModel):
         return self.category_name
     
 class Product(BaseModel):
-    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL,null=True)
     product_name = models.CharField(max_length=255)
     product_description = models.TextField()
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     product_image = models.ImageField(upload_to='products/')
-    stock_quantity = models.PositiveIntegerField()
-    category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE)
+    stock_quantity = models.IntegerField()
+    category = models.ForeignKey(ProductCategory, on_delete=models.SET_NULL,null=True)
 
     def __str__(self):
-        return f"{self.id}. {self.product_name}"
+        return f"{self.id}. {self.product_name} - {self.category.category_name} from {self.supplier.user.username}"
 
 class Order(BaseModel):
     STATUS_CHOICES = [
@@ -88,16 +88,16 @@ class Order(BaseModel):
     payment_status = models.CharField(choices=PAYMENT_CHOICES, max_length=20)
 
     def __str__(self):
-        return f"Order #{self.id} by {self.customer.user.full_name}"
+        return f"Order #{self.id} by {self.customer.user.full_name} status={self.status}, payment={self.payment_status} {self.order_date}"
 
 class OrderItem(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)  # Individual product price
+    price = models.DecimalField(max_digits=10, decimal_places=2)  # kept to record the price for later when the price of the same product might change . This i will extract from product
 
     def __str__(self):
-        return f"{self.product.product_name} x{self.quantity}"
+        return f"{self.product.product_name} x {self.quantity}"
 
 
 class Delivery(BaseModel):
@@ -116,7 +116,7 @@ class Delivery(BaseModel):
     delivery_address = models.TextField(default="Kathmandu")
 
     def __str__(self):
-        return f"Delivery for Order #{self.order.id}"
+        return f"Delivery for Order #{self.order.id}, status: {self.delivery_status}. Personnel: {self.delivery_personnel.user.username} Address: {self.delivery_address}"
 
 
 class Notification(BaseModel):
@@ -126,7 +126,7 @@ class Notification(BaseModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Notification for {self.user.email}"
+        return f"Notification for {self.user.email} - {self.created_at}"
 
 
 class Payment(BaseModel):
