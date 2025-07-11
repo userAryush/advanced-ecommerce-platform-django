@@ -118,4 +118,5 @@ def check_all_products_for_low_stock(request):
         else:
             return JsonResponse({'detail': 'All stocks are up to date!'})
 
-
+def create_notification(user, message):
+    Notification.objects.create(user=user, message=message)

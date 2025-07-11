@@ -1,5 +1,7 @@
-from .models import Product, User, Supplier, Customer,DeliveryPersonnel,Order,OrderItem,ProductCategory, Payment, Delivery
+from .models import *
 from rest_framework.serializers import ModelSerializer
+from rest_framework import serializers
+
 
 class ProductSerializer(ModelSerializer):
     class Meta:
@@ -47,6 +49,7 @@ class ProductCategorySerializer(ModelSerializer):
     class Meta:
         model = ProductCategory
         fields = '__all__'
+    
         
 class PaymentSerializer(ModelSerializer):
     class Meta:

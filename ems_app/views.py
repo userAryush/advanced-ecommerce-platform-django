@@ -11,13 +11,39 @@ from rest_framework import status
 from .utils import create_notification
 
 
+# this is for supplier or admin to create a unique category under which products related to that will exists.
 class ProductCategoryViewSet(ModelViewSet):
     queryset = ProductCategory.objects.all()
     serializer_class = ProductCategorySerializer
+    search_fields = ['category_name']
+
+
+    #overriding the create function so that if the user tries to create the similar category he gets an error with the existing category id so that it will be easier for him to find out the category 
+    # def perform_create(self, serializer):
+    #     # extracting the category_name that user is trying to create
+    #     category_name = serializer.validated_data.get('category_name')
+        
+    #     # Check if category already exists
+    #     try:
+    #         existing_category = ProductCategory.objects.get(category_name=category_name)
+    #     except ProductCategory.DoesNotExist:
+    #         existing_category = None
+    #     # or simply use filter to avoid try except
+    #     # existing_category = ProductCategory.objects.filter(category_name=category_name).first()
+        
+    #     if existing_category:
+    #         raise ValidationError(
+    #             {"detail": f"Category '{category_name}' already exists Use this id {existing_category.id} for this category!!"}
+    #         )
+
+    #     # if not overriden drf would have called this to save incoming data without checking any extra conditions
+    #     serializer.save()
+            
     
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
-    filterset_fields = ['category']
+    search_fields = ['product_name','product_price','category__category_name']
+    filterset_fields = ['product_name','category__category_name']
     
     def get_queryset(self):
         user = self.request.user
@@ -256,8 +282,7 @@ class PaymentViewSet(ModelViewSet):
             order.save()
     
     
-def create_notification(user, message):
-    Notification.objects.create(user=user, message=message)
+
     
 class NotificationViewSet(ModelViewSet):
     serializer_class = NotificationSerializer

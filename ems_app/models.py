@@ -49,7 +49,7 @@ class DeliveryPersonnel(BaseModel):
         return f"{self.id}. {self.user.full_name}"
 
 class ProductCategory(BaseModel):
-    category_name = models.CharField(max_length=255)
+    category_name = models.CharField(max_length=255, unique=True)
     category_description = models.TextField()
     def __str__(self):
         return self.category_name
@@ -66,6 +66,8 @@ class Product(BaseModel):
     def __str__(self):
         return f"{self.id}. {self.product_name} - {self.category.category_name} from {self.supplier.user.username}"
 
+
+# this is to set a default order for using it like a cart at first then later after the completion of the orders it will be stored as a order data or history
 class Order(BaseModel):
     STATUS_CHOICES = [
         ('cart', 'cart'),
@@ -90,6 +92,7 @@ class Order(BaseModel):
     def __str__(self):
         return f"Order #{self.id} by {self.customer.user.full_name} status={self.status}, payment={self.payment_status} {self.order_date}"
 
+# this is for adding individual product to the cart(order)
 class OrderItem(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -99,7 +102,7 @@ class OrderItem(BaseModel):
     def __str__(self):
         return f"{self.product.product_name} x {self.quantity}"
 
-
+# when the payment is done a default delivery obj will be created as a status of pending value so that admin can know that there is a order to be placed to the delivery personnel
 class Delivery(BaseModel):
     DELIVERY_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -118,7 +121,7 @@ class Delivery(BaseModel):
     def __str__(self):
         return f"Delivery for Order #{self.order.id}, status: {self.delivery_status}. Personnel: {self.delivery_personnel.user.username} Address: {self.delivery_address}"
 
-
+# this is to store and notify user actions or alerts 
 class Notification(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
@@ -130,7 +133,7 @@ class Notification(BaseModel):
 
 
 class Payment(BaseModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)# used uuid for secure id for payment 
     order = models.OneToOneField(Order, on_delete=models.CASCADE)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     payment_date = models.DateTimeField(auto_now_add=True)
@@ -141,7 +144,7 @@ class Payment(BaseModel):
     ], default='pending')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_gateway = models.CharField(max_length=50, blank=True, null=True)
-    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)# real system when doing online payments in the ecom the transaction id is used to verify the payment status
 
     def __str__(self):
         return f"Payment for Order #{self.order.id} - {self.status}"
