@@ -10,21 +10,40 @@ from django.contrib.auth.hashers import make_password
 from .serializers import *
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAdminUser,IsAuthenticated
-from django.db.models import Sum, Count, F
+from rest_framework.permissions import IsAdminUser,IsAuthenticated,AllowAny
+from django.contrib.auth.models import Group
 
 
-@api_view(['POST','GET'])
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def register(request):
     data = request.data.copy()
-    raw_password = data.get('password')
-    data['password'] = make_password(raw_password)
+    not_hashed_password = data.get('password')
+    hased_password = make_password(not_hashed_password)
+    data['password'] = hased_password
 
     user_serializer = UserSerializer(data=data)
 
     if user_serializer.is_valid():
         user = user_serializer.save()
         user_role = user.user_role
+
+        group_id = None
+
+        if user_role == 'supplier':
+            group_id = 2
+        elif user_role == 'customer':
+            group_id = 3
+        elif user_role == 'delivery':
+            group_id = 4
+
+        if group_id:
+            try:
+                group = Group.objects.get(id=group_id)
+                user.groups.add(group)
+            except Group.DoesNotExist:
+                return Response({'error': 'Group does not exist!'}, status=400)
 
         profile_data = {
             'phone': data.get('phone'),
@@ -66,6 +85,7 @@ def register(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login(request):
     email = request.data.get('email')
     password = request.data.get('password')
@@ -126,20 +146,56 @@ def create_notification(user, message):
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def admin_dashboard_analytics(request):
-    total_revenue = Payment.objects.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0
+    # Calculate total revenue from completed payments
+    completed_payments = Payment.objects.filter(status='completed')
+    total_revenue = 0
+    for payment in completed_payments:
+        total_revenue += payment.amount
 
-    total_orders = Order.objects.count()
-    pending_orders = Order.objects.filter(status='checkout_pending').count()
-    delivered_orders = Order.objects.filter(status='delivered').count()
-    cancelled_orders = Order.objects.filter(status='cancelled').count()
+    # Calculate order counts
+    all_orders = Order.objects.all()
+    total_orders = 0
+    pending_orders = 0
+    delivered_orders = 0
+    cancelled_orders = 0
 
+    for order in all_orders:
+        total_orders += 1
+        if order.status == 'checkout_pending':
+            pending_orders += 1
+        elif order.status == 'delivered':
+            delivered_orders += 1
+        elif order.status == 'cancelled':
+            cancelled_orders += 1
 
-    top_suppliers = (
-        OrderItem.objects
-        .values(supplier_id=F('product__supplier__id'), supplier_name=F('product__supplier__user__full_name'))
-        .annotate(total_sales=Sum(F('price') * F('quantity')))
-        .order_by('-total_sales')[:5]
-    )
+    # Calculate top suppliers
+    supplier_sales = {}  # Dictionary to store total sales for each supplier
+
+    order_items = OrderItem.objects.all()
+    for item in order_items:
+        if item.product and item.product.supplier:
+            supplier = item.product.supplier
+            supplier_id = supplier.id
+            supplier_name = supplier.user.full_name
+            item_sales = item.price * item.quantity
+
+            if supplier_id not in supplier_sales:
+                supplier_sales[supplier_id] = {
+                    'supplier_id': supplier_id,
+                    'supplier_name': supplier_name,
+                    'total_sales': 0
+                }
+
+            supplier_sales[supplier_id]['total_sales'] += item_sales
+
+    def get_total_sales(supplier):
+        return supplier['total_sales']
+    # Convert to list and sort by total sales
+    top_suppliers_list = list(supplier_sales.values())
+
+    top_suppliers_list.sort(key=get_total_sales, reverse=True)
+
+    top_suppliers = top_suppliers_list[:5]  # Get top 5
 
     return Response({
         'total_revenue': total_revenue,
@@ -147,34 +203,48 @@ def admin_dashboard_analytics(request):
         'pending_orders': pending_orders,
         'delivered_orders': delivered_orders,
         'cancelled_orders': cancelled_orders,
-        'top_suppliers': list(top_suppliers),
+        'top_suppliers': top_suppliers,
     })
     
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def supplier_dashboard_analytics(request):
     user = request.user
+
+    # Check if user is a supplier
     if user.user_role != 'supplier':
         return Response({'detail': 'You are not a supplier.'}, status=403)
 
     supplier = user.supplier
 
-    total_products = Product.objects.filter(supplier=supplier).count()
-    total_stock = Product.objects.filter(supplier=supplier).aggregate(total_stock=Sum('stock_quantity'))['total_stock'] or 0
-    low_stock_products = Product.objects.filter(supplier=supplier, stock_quantity__lt=5).count()
+    # Total products
+    products = Product.objects.filter(supplier=supplier)
+    total_products = 0
+    total_stock = 0
+    low_stock_products = 0
 
-    revenue_generated = (
-        OrderItem.objects
-        .filter(product__supplier=supplier, order__payment_status='paid')
-        .aggregate(total=Sum(F('price') * F('quantity')))
-    )['total'] or 0
+    for product in products:
+        total_products += 1
+        total_stock += product.stock_quantity
+        if product.stock_quantity < 5:
+            low_stock_products += 1
 
-    orders_pending = (
-        OrderItem.objects
-        .filter(product__supplier=supplier, order__status='ordered')
-        .count()
-    )
+    # Calculate revenue generated
+    order_items = OrderItem.objects.filter(product__supplier=supplier, order__payment_status='paid')
+    revenue_generated = 0
 
+    for item in order_items:
+        item_total = item.price * item.quantity
+        revenue_generated += item_total
+
+    # Orders pending
+    pending_order_items = OrderItem.objects.filter(product__supplier=supplier, order__status='ordered')
+    orders_pending = 0
+
+    for item in pending_order_items:
+        orders_pending += 1
+
+    # Return the analytics data
     return Response({
         'total_products': total_products,
         'total_stock': total_stock,
@@ -182,3 +252,10 @@ def supplier_dashboard_analytics(request):
         'revenue_generated': revenue_generated,
         'orders_pending': orders_pending,
     })
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def group_id(request):
+    group_objs = Group.objects.all()
+    serializer_class = GroupSerializer(group_objs, many=True)
+    return Response(serializer_class.data)

@@ -9,6 +9,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework import status
 from .utils import create_notification
+from rest_framework.permissions import DjangoModelPermissions
 
 
 # this is for supplier or admin to create a unique category under which products related to that will exists.
@@ -16,6 +17,7 @@ class ProductCategoryViewSet(ModelViewSet):
     queryset = ProductCategory.objects.all()
     serializer_class = ProductCategorySerializer
     search_fields = ['category_name']
+    permission_classes = [DjangoModelPermissions]
 
 
     #overriding the create function so that if the user tries to create the similar category he gets an error with the existing category id so that it will be easier for him to find out the category 
@@ -44,7 +46,7 @@ class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
     search_fields = ['product_name','product_price','category__category_name']
     filterset_fields = ['product_name','category__category_name']
-    
+    permission_classes = [DjangoModelPermissions]    
     def get_queryset(self):
         user = self.request.user
         
@@ -80,11 +82,11 @@ class ProductViewSet(ModelViewSet):
         if user.user_role == 'supplier' and obj.supplier != user.supplier:
             raise PermissionDenied('You can only update your own products.')
 
-            return super().update(request, *args, **kwargs)
+        return super().update(request, *args, **kwargs)
     
 class OrderViewSet(ModelViewSet):
     serializer_class = OrderSerializer
-    
+    permission_classes = [DjangoModelPermissions]    
     def get_queryset(self):
         user = self.request.user
         if user.user_role == 'customer':
@@ -95,11 +97,7 @@ class OrderViewSet(ModelViewSet):
         user = self.request.user
         if user.user_role != 'customer':
             raise PermissionDenied('Only customers can create orders (carts).')
-        serializer.save(
-            customer=user.customer,
-            status='cart',
-            payment_status='pending',
-            total_amount=0
+        serializer.save(customer=user.customer,status='cart',payment_status='pending',total_amount=0
         )
     
     @action(detail=True, methods=['post'])
@@ -136,7 +134,7 @@ class OrderViewSet(ModelViewSet):
 class OrderItemViewSet(ModelViewSet):
 
     serializer_class = OrderItemSerializer
-    
+    permission_classes = [DjangoModelPermissions]   
     def get_queryset(self):
         user = self.request.user
         if user.user_role == 'customer':
@@ -152,11 +150,11 @@ class OrderItemViewSet(ModelViewSet):
         if user.user_role != 'customer' or order.customer != user.customer:
             raise PermissionDenied('You can only add items to your own cart.')
 
-        # ✅ Check stock before adding
+        # Check stock before adding
         if product.stock_quantity < quantity:
             raise ValidationError(
                 f"Not enough stock for '{product.product_name}'. "
-                f"Available: {product.stock_quantity}, requested: {quantity}."
+                f"Available product at the moment: {product.stock_quantity}, you requested for: {quantity}."
             )
 
         serializer.save(price=product.product_price)
@@ -180,27 +178,22 @@ class OrderItemViewSet(ModelViewSet):
         self.update_order_total(order)
 
     def update_order_total(self, order):
-        total = sum(
-            item.price * item.quantity for item in order.items.all()
-        )
+        total = 0 
+
+        # Loop through each item in the order
+        for item in order.items.all():
+            item_total = item.price * item.quantity  # Calculate total for this item
+            total += item_total  # Add it to the overall total
+
+        # Update the order's total_amount
         order.total_amount = total
+
         order.save()
     
-
-class PaymentViewSet(ModelViewSet):
-    serializer_class = PaymentSerializer
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.user_role == 'customer':
-            return Payment.objects.filter(customer=user.customer)
-        return Payment.objects.all()
-
-
 from .utils import send_notification_email
 class PaymentViewSet(ModelViewSet):
     serializer_class = PaymentSerializer
-
+    permission_classes = [DjangoModelPermissions]
     def get_queryset(self):
         user = self.request.user
         if user.user_role == 'customer':
@@ -286,16 +279,9 @@ class PaymentViewSet(ModelViewSet):
     
 class NotificationViewSet(ModelViewSet):
     serializer_class = NotificationSerializer
-
+    permission_classes = [DjangoModelPermissions]
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
-
-    @action(detail=True, methods=['post'])
-    def mark_as_read(self, request, pk=None):
-        notification = self.get_object()
-        notification.is_read = True
-        notification.save()
-        return Response({'detail': 'Notification marked as read.'})    
+        return Notification.objects.filter(user=self.request.user).order_by('-created_at')  
     
     

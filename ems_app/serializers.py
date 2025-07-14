@@ -1,7 +1,7 @@
 from .models import *
 from rest_framework.serializers import ModelSerializer
 from rest_framework import serializers
-
+from django.contrib.auth.models import Group
 
 class ProductSerializer(ModelSerializer):
     class Meta:
@@ -10,7 +10,7 @@ class ProductSerializer(ModelSerializer):
 class UserSerializer(ModelSerializer):
     class Meta:
         model = User
-        fields = ['username','email','password','full_name','user_role']
+        fields = ['username','email','password','full_name','user_role','groups']
         
 class CustomerSerializer(ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -65,3 +65,7 @@ class NotificationSerializer(ModelSerializer):
     class Meta:
         model = Notification
         fields = '__all__'
+class GroupSerializer(ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['id','name']

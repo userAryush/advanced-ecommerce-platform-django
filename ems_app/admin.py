@@ -12,3 +12,7 @@ admin.site.register(Order)
 admin.site.register(OrderItem)
 admin.site.register(Payment)
 admin.site.register(Delivery)
+
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ['id', 'customer', 'status', 'created_at']  
+    list_filter = ['status']  

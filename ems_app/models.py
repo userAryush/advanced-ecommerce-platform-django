@@ -119,13 +119,16 @@ class Delivery(BaseModel):
     delivery_address = models.TextField(default="Kathmandu")
 
     def __str__(self):
-        return f"Delivery for Order #{self.order.id}, status: {self.delivery_status}. Personnel: {self.delivery_personnel.user.username} Address: {self.delivery_address}"
+        if self.delivery_personnel is not None:
+            personnel_name = self.delivery_personnel.user.username
+        else:
+            personnel_name = "Unassigned"
+        return f"Delivery for Order #{self.order.id}  | status: {self.delivery_status}  |  Personnel: {personnel_name}  |  Address: {self.delivery_address}"
 
 # this is to store and notify user actions or alerts 
 class Notification(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
-    is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
