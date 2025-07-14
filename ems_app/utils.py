@@ -2,15 +2,16 @@ from django.core.mail import send_mail
 from django.conf import settings
 from .models import Product
 from rest_framework.response import Response
-from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth.hashers import make_password
 from .serializers import *
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAdminUser,IsAuthenticated
+from django.db.models import Sum, Count, F
 
 
 @api_view(['POST','GET'])
@@ -120,3 +121,64 @@ def check_all_products_for_low_stock(request):
 
 def create_notification(user, message):
     Notification.objects.create(user=user, message=message)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_dashboard_analytics(request):
+    total_revenue = Payment.objects.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0
+
+    total_orders = Order.objects.count()
+    pending_orders = Order.objects.filter(status='checkout_pending').count()
+    delivered_orders = Order.objects.filter(status='delivered').count()
+    cancelled_orders = Order.objects.filter(status='cancelled').count()
+
+
+    top_suppliers = (
+        OrderItem.objects
+        .values(supplier_id=F('product__supplier__id'), supplier_name=F('product__supplier__user__full_name'))
+        .annotate(total_sales=Sum(F('price') * F('quantity')))
+        .order_by('-total_sales')[:5]
+    )
+
+    return Response({
+        'total_revenue': total_revenue,
+        'total_orders': total_orders,
+        'pending_orders': pending_orders,
+        'delivered_orders': delivered_orders,
+        'cancelled_orders': cancelled_orders,
+        'top_suppliers': list(top_suppliers),
+    })
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def supplier_dashboard_analytics(request):
+    user = request.user
+    if user.user_role != 'supplier':
+        return Response({'detail': 'You are not a supplier.'}, status=403)
+
+    supplier = user.supplier
+
+    total_products = Product.objects.filter(supplier=supplier).count()
+    total_stock = Product.objects.filter(supplier=supplier).aggregate(total_stock=Sum('stock_quantity'))['total_stock'] or 0
+    low_stock_products = Product.objects.filter(supplier=supplier, stock_quantity__lt=5).count()
+
+    revenue_generated = (
+        OrderItem.objects
+        .filter(product__supplier=supplier, order__payment_status='paid')
+        .aggregate(total=Sum(F('price') * F('quantity')))
+    )['total'] or 0
+
+    orders_pending = (
+        OrderItem.objects
+        .filter(product__supplier=supplier, order__status='ordered')
+        .count()
+    )
+
+    return Response({
+        'total_products': total_products,
+        'total_stock': total_stock,
+        'low_stock_products': low_stock_products,
+        'revenue_generated': revenue_generated,
+        'orders_pending': orders_pending,
+    })
