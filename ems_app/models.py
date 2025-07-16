@@ -72,7 +72,6 @@ class Order(BaseModel):
     STATUS_CHOICES = [
         ('cart', 'cart'),
         ('ordered', 'ordered'),
-        ('shipped', 'Shipped'),
         ('delivered', 'Delivered'),
         ('cancelled', 'Cancelled'),
     ]
@@ -89,8 +88,8 @@ class Order(BaseModel):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_status = models.CharField(choices=PAYMENT_CHOICES, max_length=20)
 
-    def __str__(self):
-        return f"Order #{self.id} by {self.customer.user.full_name} status={self.status}, payment={self.payment_status} {self.order_date}"
+    # def __str__(self):
+    #     return f"Order #{self.id} by {self.customer.user.full_name} |  status={self.status}  |  payment={self.payment_status}  |   {self.order_date}"
 
 # this is for adding individual product to the cart(order)
 class OrderItem(BaseModel):
@@ -107,7 +106,6 @@ class Delivery(BaseModel):
     DELIVERY_STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('assigned', 'Assigned'),
-        ('in_transit', 'In Transit'),
         ('delivered', 'Delivered'),
     ]
 
@@ -123,7 +121,7 @@ class Delivery(BaseModel):
             personnel_name = self.delivery_personnel.user.username
         else:
             personnel_name = "Unassigned"
-        return f"Delivery for Order #{self.order.id}  | status: {self.delivery_status}  |  Personnel: {personnel_name}  |  Address: {self.delivery_address}"
+        return f"ID: {self.id} |  Delivery for Order #{self.order.id}  | status: {self.delivery_status}  |  Personnel: {personnel_name}  |  Address: {self.delivery_address}"
 
 # this is to store and notify user actions or alerts 
 class Notification(BaseModel):

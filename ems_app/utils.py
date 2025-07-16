@@ -12,6 +12,8 @@ from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAdminUser,IsAuthenticated,AllowAny
 from django.contrib.auth.models import Group
+from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 
 
@@ -259,3 +261,40 @@ def group_id(request):
     group_objs = Group.objects.all()
     serializer_class = GroupSerializer(group_objs, many=True)
     return Response(serializer_class.data)
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_delivery_as_delivered(request, delivery_pk):
+    user = request.user
+
+    try:
+        delivery = Delivery.objects.get(id=delivery_pk)
+    except Delivery.DoesNotExist:
+        return Response({'detail': 'Delivery not found.'})
+
+    # Ensure only assigned personnel can update
+    if delivery.delivery_personnel is None or delivery.delivery_personnel.user != user:
+        raise PermissionDenied('You are not assigned to this delivery.')
+
+    # Hardcode the status!
+    delivery.delivery_status = 'delivered'
+    delivery.delivered_date = timezone.now()
+
+    # Update parent order status too
+    delivery.order.status = 'delivered'
+    delivery.order.save()
+    delivery.save()
+    
+    customer_email = delivery.order.customer.user.email
+    subject = f"Order {delivery.order.id}"
+    body = (
+        f"Dear {delivery.order.customer.user.full_name},\n\n"
+        f"Your Order has been delivered!\n"
+
+        f"- Aryush Ecom"
+    )
+    send_notification_email(subject, body, [customer_email])
+
+    return Response({'detail': f'Delivery #{delivery.id} marked as delivered.','order_id': delivery.order.id,})

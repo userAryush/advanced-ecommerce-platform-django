@@ -8,11 +8,10 @@ admin.site.register(Supplier)
 admin.site.register(Customer)
 admin.site.register(DeliveryPersonnel)
 admin.site.register(Product)
-admin.site.register(Order)
-admin.site.register(OrderItem)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ['id', 'customer', 'status', 'created_at']  # attributes to show in the list view
+    list_filter = ['status']  
+admin.site.register(Order, OrderAdmin)
+# admin.site.register(OrderItem)
 admin.site.register(Payment)
 admin.site.register(Delivery)
-
-class OrderAdmin(admin.ModelAdmin):
-    list_display = ['id', 'customer', 'status', 'created_at']  
-    list_filter = ['status']  

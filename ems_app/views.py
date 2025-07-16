@@ -57,48 +57,36 @@ class ProductViewSet(ModelViewSet):
     
     def perform_create(self, serializer):
         user = self.request.user
+        # if user.user_role != 'supplier':
+        #     raise PermissionDenied('Only suppliers can create products')   # now have set groups and permission instead of this now the permission check is handled before calling this perform_Create function
+        current_logged_supplier = user.supplier  # so that the product will be created with logged supplier only
+        serializer.save(supplier=current_logged_supplier)
         
-        if user.user_role != 'supplier':
-            raise PermissionDenied('Only suppliers can create products')
+    # for retrive , update and delete get_object uses get_queryset where i have already filtered out suppliers products so even if other supplier tries to access others product then he fails to do so as the get_queryset returns only his products and API will respond with a 404 error   {"detail": "No Product matches the given query."}
         
-        supplier = user.supplier
-        serializer.save(supplier=user.supplier)
-        
-    def get_object(self):
-        obj = super().get_object()
-        user = self.request.user
-        
-        if user.user_role == 'supplier' and obj.supplier.user != user:
-            raise PermissionDenied('You can only view your own products')
-        
-        elif user.user_role != 'supplier':
-            raise PermissionDenied('Only suppliers can view their own products')
-        return obj
-    
-    def update(self, request, *args, **kwargs):
-        user = request.user
-        obj = self.get_object()  # This already checks supplier ownership
-
-        if user.user_role == 'supplier' and obj.supplier != user.supplier:
-            raise PermissionDenied('You can only update your own products.')
-
-        return super().update(request, *args, **kwargs)
-    
+   
 class OrderViewSet(ModelViewSet):
     serializer_class = OrderSerializer
-    permission_classes = [DjangoModelPermissions]    
+    permission_classes = [DjangoModelPermissions]   
+    
+    # customer gets to see their order only and admin gets to see all other users cant through groups and permission 
     def get_queryset(self):
         user = self.request.user
         if user.user_role == 'customer':
             return Order.objects.filter(customer=user.customer)
-        return Order.objects.all()
+        # admin shoudlnt be able to see pending orders
+        
+        elif user.user_role == 'admin':
+            allowed_status = ['ordered', 'shipped', 'delivered', 'cancelled']
+            return Order.objects.filter(status__in=allowed_status)
+        
+        return Order.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.user_role != 'customer':
-            raise PermissionDenied('Only customers can create orders (carts).')
-        serializer.save(customer=user.customer,status='cart',payment_status='pending',total_amount=0
-        )
+        # if user.user_role != 'customer':
+        #     raise PermissionDenied('Only customers can create orders.')
+        serializer.save(customer=user.customer,status='cart',payment_status='pending',total_amount=0  )
     
     @action(detail=True, methods=['post'])
     def checkout(self, request, pk=None):
@@ -106,7 +94,7 @@ class OrderViewSet(ModelViewSet):
         user = request.user
 
         if user.user_role != 'customer' or order.customer != user.customer:
-            raise PermissionDenied('You can only checkout your own order.')
+            raise PermissionDenied('You can only checkout your own order!!')
         if order.status != 'cart':
             return Response({'error': 'Only cart orders can be checked out.'}, status=400)
         if order.total_amount <= 0:
@@ -115,20 +103,14 @@ class OrderViewSet(ModelViewSet):
         # Check stock but do NOT reduce stock yet
         for item in order.items.all():
             if item.product.stock_quantity < item.quantity:
-                raise ValidationError(
-                    f"Not enough stock for product '{item.product.name}'. "
-                    f"Available: {item.product.stock_quantity}, requested: {item.quantity}"
-                )
+                raise ValidationError( f"Not enough stock for product '{item.product.name}'. "f"Available: {item.product.stock_quantity}, requested: {item.quantity}")
 
         order.status = 'checkout_pending'  # Waiting for payment
         order.save()
 
-        # Return order summary (bill)
+        # Return order like a bill
         serializer = self.get_serializer(order)
-        return Response({
-            'message': 'Order ready for payment.',
-            'order': serializer.data
-        }, status=200)
+        return Response({'message': 'Order ready for payment.','order': serializer.data}, status=200)
 
     
 class OrderItemViewSet(ModelViewSet):
@@ -138,8 +120,10 @@ class OrderItemViewSet(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.user_role == 'customer':
-            return OrderItem.objects.filter(order__customer=user.customer)
-        return OrderItem.objects.all()
+            return OrderItem.objects.filter(order__customer=user.customer, order__status='cart' )
+        else:
+            return OrderItem.objects.none()
+       
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -161,10 +145,12 @@ class OrderItemViewSet(ModelViewSet):
         self.update_order_total(order)
 
     def perform_update(self, serializer):
+        # here aba if product nei change garo vane tyo aaune vo product ma else itll be none with same product
         product = serializer.validated_data.get('product', None)
         instance = serializer.instance
 
         if product:
+            # if new product chaneko cha vane you need to update the price
             serializer.save(price=product.price)
         else:
             serializer.save()
@@ -174,6 +160,8 @@ class OrderItemViewSet(ModelViewSet):
 
     def perform_destroy(self, instance):
         order = instance.order
+        if order.status != 'cart':
+            raise PermissionDenied('You can only remove items from your cart before checkout.')
         instance.delete()
         self.update_order_total(order)
 
